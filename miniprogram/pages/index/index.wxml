@@ -1,0 +1,248 @@
+<view class="page-root">
+  <!-- 自定义暗房顶部导航栏（精确避让右上角微信胶囊） -->
+  <view class="nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{statusBarHeight + navBarHeight}}px;">
+    <view class="nav-inner" style="height: {{navBarHeight}}px; padding-right: {{capsuleRightOffset}}px;">
+      <view class="nav-left">
+        <view class="nav-btn ghost" wx:if="{{hasPhoto}}" bindtap="onChoosePhoto">换照片</view>
+        <view class="nav-btn ghost" wx:else bindtap="onChooseFromAlbum">选照片</view>
+      </view>
+      <view class="nav-brand">SILVERLAB</view>
+      <view class="nav-right">
+        <view
+          class="nav-btn primary {{hasPhoto && !isExporting ? '' : 'disabled'}}"
+          bindtap="onSavePhoto"
+        >
+          保存
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 暗房主舞台与预览画布区域 -->
+  <view class="stage-wrap">
+    <view class="stage-area" id="stageArea">
+      <!-- 空态：极简取景框引导 -->
+      <view class="empty-viewfinder" wx:if="{{!hasPhoto}}">
+        <view class="corner tl"></view>
+        <view class="corner tr"></view>
+        <view class="corner bl"></view>
+        <view class="corner br"></view>
+
+        <view class="empty-badge">PHYSICAL SPECTRAL FILM</view>
+        <view class="empty-title">银盐暗房</view>
+        <view class="empty-desc">基于 spektrafilm 物理光谱 LUT · 本地 WebGL 冲印 · 照片不上传</view>
+
+        <view class="empty-actions">
+          <view class="action-btn primary" bindtap="onChooseFromAlbum">从相册选照片</view>
+          <view class="action-btn secondary" bindtap="onTakePhoto">直接拍摄</view>
+        </view>
+      </view>
+
+      <!-- 编辑态：相纸边框容器 + WebGL 画布 + 所见即所得日期戳 -->
+      <view
+        class="print-frame {{showBorder ? 'with-border' : ''}}"
+        wx:else
+        style="width: {{displayW + padX * 2}}px; height: {{displayH + padTop + padBottom}}px; padding: {{padTop}}px {{padX}}px {{padBottom}}px {{padX}}px;"
+      >
+        <view
+          class="photo-frame"
+          style="width: {{displayW}}px; height: {{displayH}}px;"
+          bindtouchstart="onCompareStart"
+          bindtouchend="onCompareEnd"
+          bindtouchcancel="onCompareEnd"
+        >
+          <canvas
+            type="webgl"
+            id="previewCanvas"
+            class="preview-canvas"
+            style="width: {{displayW}}px; height: {{displayH}}px;"
+          ></canvas>
+
+          <!-- 长按对比原图标识 -->
+          <view class="compare-badge" wx:if="{{compareOriginal}}">原图</view>
+
+          <!-- 右下角经典胶片石英日期戳预览 -->
+          <text
+            class="date-stamp"
+            wx:if="{{showDate && !compareOriginal}}"
+            style="font-size: {{dateFontSize}}px; right: {{dateMarginX}}px; bottom: {{dateMarginY}}px;"
+          >{{dateText}}</text>
+        </view>
+
+        <!-- 相纸白边底部印记 -->
+        <view class="border-caption" wx:if="{{showBorder}}" style="height: {{padBottom}}px;">
+          <text class="border-caption-text" style="font-size: {{borderFontSize}}px;">SILVERLAB · {{currentFilm.code}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 快捷暗房选项胶囊栏 -->
+    <view class="quick-bar" wx:if="{{hasPhoto}}">
+      <view class="quick-pill {{showBorder ? 'active' : ''}}" bindtap="onToggleBorder">
+        <text>相纸白边</text>
+      </view>
+      <view class="quick-pill {{showDate ? 'active' : ''}}" bindtap="onToggleDate">
+        <text>日期戳</text>
+      </view>
+      <view class="quick-pill {{compareOriginal ? 'active' : ''}}" bindtap="onToggleCompare">
+        <text>{{compareOriginal ? '恢复成片' : '对比原图'}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 底部暗房控制面板 -->
+  <view class="bottom-panel">
+    <!-- 控制标签切换 -->
+    <view class="panel-header">
+      <view class="tab-group">
+        <view class="tab-item {{activeTab === 'film' ? 'active' : ''}}" data-tab="film" bindtap="onSwitchTab">
+          胶卷
+        </view>
+        <view class="tab-item {{activeTab === 'adjust' ? 'active' : ''}}" data-tab="adjust" bindtap="onSwitchTab">
+          暗房调节
+        </view>
+      </view>
+      <view class="panel-meta">
+        <text class="current-film-label" wx:if="{{activeTab === 'film'}}">{{currentFilm.code}} · {{currentFilm.name}}</text>
+        <view class="reset-btn" wx:else bindtap="onResetParams">恢复默认</view>
+      </view>
+    </view>
+
+    <!-- 胶卷列表面板 -->
+    <scroll-view
+      wx:if="{{activeTab === 'film'}}"
+      class="film-scroll"
+      scroll-x
+      enable-flex
+      enhanced
+      show-scrollbar="{{false}}"
+    >
+      <view class="film-list">
+        <view
+          wx:for="{{films}}"
+          wx:key="id"
+          class="film-card {{currentFilmId === item.id ? 'selected' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="onSelectFilm"
+        >
+          <view class="film-accent" style="background: {{item.accent}};"></view>
+          <view class="film-card-body">
+            <view class="film-code">{{item.code}}</view>
+            <view class="film-name">{{item.name}}</view>
+            <view class="film-tag">{{item.tag}}</view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+
+    <!-- 暗房精细调节面板 -->
+    <scroll-view wx:else class="adjust-scroll" scroll-y enhanced show-scrollbar="{{false}}">
+      <view class="adjust-list">
+        <view class="slider-row">
+          <view class="slider-label-row">
+            <text class="slider-name">胶片浓度</text>
+            <text class="slider-val">{{sliderUi.intensity}}%</text>
+          </view>
+          <slider
+            class="dark-slider"
+            min="0"
+            max="100"
+            step="1"
+            value="{{sliderUi.intensity}}"
+            activeColor="#E5A93C"
+            backgroundColor="#2C2C34"
+            block-size="16"
+            block-color="#F5F5F7"
+            data-key="intensity"
+            bindchanging="onSliderChanging"
+            bindchange="onSliderChange"
+          />
+        </view>
+
+        <view class="slider-row">
+          <view class="slider-label-row">
+            <text class="slider-name">曝光补偿</text>
+            <text class="slider-val">{{exposureText}} EV</text>
+          </view>
+          <slider
+            class="dark-slider"
+            min="-20"
+            max="20"
+            step="1"
+            value="{{sliderUi.exposure}}"
+            activeColor="#E5A93C"
+            backgroundColor="#2C2C34"
+            block-size="16"
+            block-color="#F5F5F7"
+            data-key="exposure"
+            bindchanging="onSliderChanging"
+            bindchange="onSliderChange"
+          />
+        </view>
+
+        <view class="slider-row">
+          <view class="slider-label-row">
+            <text class="slider-name">胶片颗粒</text>
+            <text class="slider-val">{{sliderUi.grain}}%</text>
+          </view>
+          <slider
+            class="dark-slider"
+            min="0"
+            max="100"
+            step="1"
+            value="{{sliderUi.grain}}"
+            activeColor="#E5A93C"
+            backgroundColor="#2C2C34"
+            block-size="16"
+            block-color="#F5F5F7"
+            data-key="grain"
+            bindchanging="onSliderChanging"
+            bindchange="onSliderChange"
+          />
+        </view>
+
+        <view class="slider-row">
+          <view class="slider-label-row">
+            <text class="slider-name">高光红晕</text>
+            <text class="slider-val">{{sliderUi.halation}}%</text>
+          </view>
+          <slider
+            class="dark-slider"
+            min="0"
+            max="100"
+            step="1"
+            value="{{sliderUi.halation}}"
+            activeColor="#E5A93C"
+            backgroundColor="#2C2C34"
+            block-size="16"
+            block-color="#F5F5F7"
+            data-key="halation"
+            bindchanging="onSliderChanging"
+            bindchange="onSliderChange"
+          />
+        </view>
+
+        <view class="slider-row">
+          <view class="slider-label-row">
+            <text class="slider-name">镜头暗角</text>
+            <text class="slider-val">{{sliderUi.vignette}}%</text>
+          </view>
+          <slider
+            class="dark-slider"
+            min="0"
+            max="100"
+            step="1"
+            value="{{sliderUi.vignette}}"
+            activeColor="#E5A93C"
+            backgroundColor="#2C2C34"
+            block-size="16"
+            block-color="#F5F5F7"
+            data-key="vignette"
+            bindchanging="onSliderChanging"
+            bindchange="onSliderChange"
+          />
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</view>

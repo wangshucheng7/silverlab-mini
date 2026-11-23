@@ -1,0 +1,7 @@
+.venv/
+tools/build_tmp/
+project.private.config.json
+.DS_Store
+__pycache__/
+*.pyc
+node_modules/
